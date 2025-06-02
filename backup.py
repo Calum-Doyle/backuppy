@@ -17,19 +17,38 @@ TODO
     - Implement file handling  X
     - Implement group and item addition  X
     - Implement group and item deletion  X
-    - Add backup functionality
-    - Add backup verification
-    - Add logging
-    - Add backup restoration
+    - Add backup functionality  X
+    - Add logging  X
+    - Add backup restoration X 
+    - Add notification system
 '''
 
 ### INCLUDE LIBRARIES ###
 import argparse
 import json
+import subprocess
+import time
+import datetime
+import os
 
 ### FILE LOCATIONS ###
 DATA_LOCATION = 'data.json'
 LOGFILE_LOCATION = 'backup.log'
+
+### STRING FORMATTING ###
+def ensure_trailing_slash(path):
+    return path if path.endswith('/') else path + '/'
+
+def remove_trailing_slash(path):
+    return path[:-1] if path.endswith('/') else path
+
+def move_up_directory(path):
+    parts = path.strip('/').split('/')
+    return '/' + '/'.join(parts[:max(0, len(parts)-1)]) + '/'
+
+def ensure_absolute_path(path: str) -> str:
+    return path if path.startswith('/') else os.path.join(os.getcwd(), path)
+
 
 ### lOAD DATA ###
 with open(DATA_LOCATION, 'r') as file:
@@ -41,6 +60,12 @@ def save():
     with open(DATA_LOCATION, 'w') as file:
         file.write(json_data)
 
+### UPDATE LOG ###
+def log(output):
+    timestamp = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')
+    with open(LOGFILE_LOCATION, 'a') as file:
+        file.write(f"[{timestamp}]: {output}" + "\n")
+
 ### PRINT CONFIG ###
 def print_group(current_group):
     print(f"{current_group['name']}:")
@@ -49,46 +74,181 @@ def print_group(current_group):
         print(f"{x}. {item['origin']} -> {item['destination']}")
         x += 1
 
-def print_config(selected_group = None):
-    if selected_group:
-       print_group(selected_group) 
-    else:
-        for g in DATA['groups']:
-            print_group(g)
+def print_config(args): 
+    for g in DATA['groups']:
+        print_group(g)
                 
 ### ADD BACKUP LOCATIONS ###
-def add_item(group, origin, destination):
-    new_item = { "origin": origin, "destination": destination}
+def add_item(args):
+    new_item = { "origin": remove_trailing_slash(args.origin), "destination": ensure_absolute_path(ensure_trailing_slash(args.destination))}
     for g in DATA['groups']:
-        if g["name"] == group:
+        if g["name"] == args.group:
             g["items"].append(new_item)
+            log(f"added backup {args.origin} -> {args.destination} to group {args.group}")
+            save()
             return True
     return False
 
-def add_group(group):
-    new_group = {"name": group, "items": []} 
-    DATA["groups"].append(onew_group)
+def add_group(args):
+    new_group = {"name": args.name, "items": []} 
+    DATA["groups"].append(new_group)
+    log(f"added group {args.name}")
+    save()
     
 ### REMOVE BACKUP LOCATIONS ###
-def remove_item(group, number):
+def remove_item(args):
     x = 0
     for g in DATA['groups']:
-        if g['name'] == group:
+        if g['name'] == args.group:
             for i in g['items']:
-                if x == number:
-                    g['items'].pop(x)
+                if x == args.number:
+                    removed = g['items'].pop(x)
+                    log(f"removed backup {removed['origin']} -> {removed['destination']} from group {group}")
+                    save()
+                    return True
                 x += 1
+    return False
 
-def remove_group(group):
+def remove_group(args):
     x = 0
     for g in DATA['groups']:
-        if g['name'] == group:
+        if g['name'] == args.group:
             DATA['groups'].pop(x)
-            return
+            log(f"removed group {args.group}")
+            save()
+            return True
         x += 1
+    return False
+
+### FILE TRANSFER ###
+def copy(origin, destination):
+    result = subprocess.run(
+            ["rsync", "-r", origin, destination],
+            capture_output=True,
+            text=True
+        )
+    if result.returncode == 0:
+        log(f"SUCCESS: {origin} -> {destination}")
+        return True
+    else:
+        log(f"FAILURE: {origin} -> {destination}")
+        return False
+
+
+
+### EXEXUTE BACKUP ###
+def back_up_group(group):
+    log(f"backing up group {group['name']}")
+    no_errors = True
+    for item in group['items']:
+        if copy(item['origin'], item['destination']) != 0:
+            no_errors = False
+    return no_errors
+            
+
+def run_backup(args):
+    group = args.group
+    if group != None:
+        if back_up_group(group):
+            log(f"group {group['name']} backed up successfully")
+        else:
+            log(f"encountered errors when backing up group {group}")
+    else:
+        log("backing up all groups")
+        no_errors = True
+        for g in DATA['groups']:  
+            if back_up_group(g):
+                log(f"group {g['name']} backed up with no errors")
+            else:
+                log(f"encountered errors when backing up group {g['name']}")
+                no_errors = False
+        if no_errors:
+            log("SUCCESS: all groups backed up successfully")
+        else:
+            log("FAILURE: some errors occurred during backup")
+
+### BACKUP RESTORATION ###
+def group_restore(group):
+    log(f"restoring group {group['name']}")
+    no_errors = True
+    for item in group['items']:
+        origin_path = move_up_directory(item['origin'])
+        if copy(item['destination'], origin_path) != 0:
+           no_errors = False 
+    return no_errors
+
+
+def backup_restore(args):
+    group = args.group
+    if group != None:
+        if group_restore(group):
+            log(f"group {group['name']} restored successfully")
+        else:
+            log(f"errors encountered while restoring group {group['name']}")
+    else:
+        log("restoring all backups")
+        no_errors = True
+        for g in DATA['groups']:
+            if group_restore(g):
+                log(f"group {g['name']} restored with no errors")
+            else:
+                log(f"encountered errors while restoring group {g['name']}")
+                no_errors = False
+        if no_errors:
+            log("SUCCESS: all groups restored successfully")
+        else:
+            log("FAIURE: errors occured during backup restoration")
+
+
 
 ### RUNTIME ###
 if __name__ == "__main__":
-    remove_group("Group2")
-    print_config()
+    #init parser
+    parser = argparse.ArgumentParser(description="Backup management system")
+    subparsers = parser.add_subparsers(title="commands", dest="command")
 
+    #show command
+    parser_show = subparsers.add_parser("show", help="Show current configuration")
+    parser_show.set_defaults(func=print_config)
+
+    #add item command
+    parser_item_add = subparsers.add_parser("additem", help="Add an item to a group.")
+    parser_item_add.add_argument("group", type=str, help="The group to add the item to")
+    parser_item_add.add_argument("origin", type=str, help="The path to the directory to back up")
+    parser_item_add.add_argument("destination", type=str, help="The path to the backup directory")
+    parser_item_add.set_defaults(func=add_item)
+
+    #remove item command
+    parser_item_remove = subparsers.add_parser("removeitem", help="Remove an item from a group")
+    parser_item_remove.add_argument("group", type=str, help="The group which contains the item")
+    parser_item_remove.add_argument("index", type=int, help="The index of the item in the group (shown by the 'show' command")
+    parser_item_remove.set_defaults(func=remove_item)
+
+    #add group command
+    parser_group_add = subparsers.add_parser("addgroup", help="Add a backup group")
+    parser_group_add.add_argument("name", help="The name of the group")
+    parser_group_add.set_defaults(func=add_group)
+
+    #remove group command
+    parser_group_remove = subparsers.add_parser("removegroup", help="Remove a backup group")
+    parser_group_remove.add_argument("name", help="The name of the group to be removed")
+    parser_group_remove.set_defaults(func=remove_group)
+
+    #run backup command
+    parser_run = subparsers.add_parser("run", help="Run the backup")
+    parser_run.add_argument("--group", help="Specify a group to back up.")
+    parser_run.set_defaults(func=run_backup)
+
+    #restore backup command
+    parser_restore = subparsers.add_parser("restore", help="Restore backups")
+    parser_restore.add_argument("--group", help="Specify a group to restore.")
+    parser_restore.set_defaults(func=backup_restore)
+
+    #generate arguments object
+    args = parser.parse_args()
+    
+    #run program
+    if args.command is None:
+        parser.print_help()
+    else:
+        args.func(args)
