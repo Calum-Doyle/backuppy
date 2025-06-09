@@ -1,1 +1,1 @@
-{"groups": [{"name": "Backups", "items": [{"origin": "/home/user/backuppy/test_origin/test1", "destination": "/home/user/backuppy/test_destination/"}, {"origin": "/home/user/backuppy/test_origin/test2", "destination": "/home/user/backuppy/test_destination/"}]}, {"name": "test", "items": [{"origin": "/home/user/backuppy/test_origin/test3", "destination": "/home/user/backuppy/test_destination/"}, {"origin": "test_origin/test4", "destination": "/home/user/backuppy/test_destination/"}]}]}
+{"groups": []}

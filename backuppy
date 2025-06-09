@@ -1,4 +1,6 @@
- ########     ###     ######  ##    ## ##     ## ########  ########  ##    ## 
+#!/usr/bin/env python3
+
+########     ###     ######  ##    ## ##     ## ########  ########  ##    ## 
  ##     ##   ## ##   ##    ## ##   ##  ##     ## ##     ## ##     ##  ##  ##  
  ##     ##  ##   ##  ##       ##  ##   ##     ## ##     ## ##     ##   ####   
  ########  ##     ## ##       #####    ##     ## ########  ########     ##    
@@ -12,17 +14,6 @@
 # v0.1
 # 21.05.25
 
-'''
-TODO
-    - Implement file handling  X
-    - Implement group and item addition  X
-    - Implement group and item deletion  X
-    - Add backup functionality  X
-    - Add logging  X
-    - Add backup restoration X 
-    - Add notification system
-'''
-
 ### INCLUDE LIBRARIES ###
 import argparse
 import json
@@ -31,11 +22,11 @@ import time
 import datetime
 import os
 
-### FILE LOCATIONS ###
-DATA_LOCATION = 'data.json'
-LOGFILE_LOCATION = 'backup.log'
+#### FILE LOCATIONS ###
+DATA_LOCATION = os.path.expanduser('/usr/local/share/backuppy/data.json')
+LOGFILE_LOCATION = os.path.expanduser('/var/log/backuppy/data.json')
 
-### STRING FORMATTING ###
+## STRING FORMATTING ###
 def ensure_trailing_slash(path):
     return path if path.endswith('/') else path + '/'
 
@@ -70,14 +61,20 @@ def log(output):
 def print_group(current_group):
     print(f"{current_group['name']}:")
     x = 0
-    for item in current_group['items']:
-        print(f"{x}. {item['origin']} -> {item['destination']}")
-        x += 1
+    if current_group['items']:
+        for item in current_group['items']:
+            print(f"{x}. {item['origin']} -> {item['destination']}")
+            x += 1
+    else:
+        print("No backups added")
 
-def print_config(args): 
-    for g in DATA['groups']:
-        print_group(g)
-                
+def print_config(args):
+    if DATA['groups']:
+        for g in DATA['groups']:
+            print_group(g)
+    else:
+        print("No groups yet.")
+
 ### ADD BACKUP LOCATIONS ###
 def add_item(args):
     new_item = { "origin": remove_trailing_slash(args.origin), "destination": ensure_absolute_path(ensure_trailing_slash(args.destination))}
@@ -112,9 +109,9 @@ def remove_item(args):
 def remove_group(args):
     x = 0
     for g in DATA['groups']:
-        if g['name'] == args.group:
+        if g['name'] == args.name:
             DATA['groups'].pop(x)
-            log(f"removed group {args.group}")
+            log(f"removed group {args.name}")
             save()
             return True
         x += 1
