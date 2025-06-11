@@ -24,7 +24,7 @@ import os
 
 #### FILE LOCATIONS ###
 DATA_LOCATION = os.path.expanduser('/usr/local/share/backuppy/data.json')
-LOGFILE_LOCATION = os.path.expanduser('/var/log/backuppy/data.json')
+LOGFILE_LOCATION = os.path.expanduser('/var/log/backuppy/backuppy.log')
 
 ## STRING FORMATTING ###
 def ensure_trailing_slash(path):
@@ -136,11 +136,11 @@ def copy(origin, destination):
 ### EXEXUTE BACKUP ###
 def back_up_group(group):
     log(f"backing up group {group['name']}")
-    no_errors = True
+    errors_found = False
     for item in group['items']:
         if copy(item['origin'], item['destination']) != 0:
-            no_errors = False
-    return no_errors
+            errors_found =True 
+    return errors_found
             
 
 def run_backup(args):
@@ -167,12 +167,12 @@ def run_backup(args):
 ### BACKUP RESTORATION ###
 def group_restore(group):
     log(f"restoring group {group['name']}")
-    no_errors = True
+    errors_found = False 
     for item in group['items']:
         origin_path = move_up_directory(item['origin'])
         if copy(item['destination'], origin_path) != 0:
-           no_errors = False 
-    return no_errors
+           errors_found = True 
+    return errors_found
 
 
 def backup_restore(args):
